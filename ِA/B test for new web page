@@ -1,0 +1,521 @@
+Analyze A/B Test Results
+This project will assure you have mastered the subjects covered in the statistics lessons. The hope is to have this project be as comprehensive of these topics as possible. Good luck!
+
+Table of Contents
+Introduction
+Part I - Probability
+Part II - A/B Test
+Part III - Regression
+
+Introduction
+A/B tests are very commonly performed by data analysts and data scientists. It is important that you get some practice working with the difficulties of these
+
+For this project, you will be working to understand the results of an A/B test run by an e-commerce website. Your goal is to work through this notebook to help the company understand if they should implement the new page, keep the old page, or perhaps run the experiment longer to make their decision.
+
+As you work through this notebook, follow along in the classroom and answer the corresponding quiz questions associated with each question. The labels for each classroom concept are provided for each question. This will assure you are on the right track as you work through the project, and you can feel more confident in your final submission meeting the criteria. As a final check, assure you meet all the criteria on the RUBRIC.
+
+
+Part I - Probability
+To get started, let's import our libraries.
+
+import pandas as pd
+import numpy as np
+import random
+import matplotlib.pyplot as plt
+%matplotlib inline
+#We are setting the seed to assure you get the same answers on quizzes as we set up
+random.seed(42)
+1. Now, read in the ab_data.csv data. Store it in df. Use your dataframe to answer the questions in Quiz 1 of the classroom.
+
+a. Read in the dataset and take a look at the top few rows here:
+
+df=pd.read_csv("ab_data.csv")
+b. Use the below cell to find the number of rows in the dataset.
+
+df.head()
+user_id	timestamp	group	landing_page	converted
+0	851104	2017-01-21 22:11:48.556739	control	old_page	0
+1	804228	2017-01-12 08:01:45.159739	control	old_page	0
+2	661590	2017-01-11 16:55:06.154213	treatment	new_page	0
+3	853541	2017-01-08 18:28:03.143765	treatment	new_page	0
+4	864975	2017-01-21 01:52:26.210827	control	old_page	1
+#no. of rows
+df.shape[0]
+294478
+c. The number of unique users in the dataset.
+
+# no. of unique users
+df["user_id"].nunique()
+290584
+d. The proportion of users converted.
+
+# mean of user converted
+df.converted.mean()
+0.11965919355605512
+e. The number of times the new_page and treatment don't line up.
+
+# frequency table shows no. of new_page and _old_page dont line up
+pd.crosstab(index=df.landing_page,columns=df.group, margins=True)
+group	control	treatment	All
+landing_page			
+new_page	1928	145311	147239
+old_page	145274	1965	147239
+All	147202	147276	294478
+old_treatment=df.query('landing_page=="old_page" and group=="treatment"').count()[0]
+old_treatment
+1965
+new_control=df.query('landing_page=="new_page" and group=="control"').count()[0]
+new_control
+1928
+not_line_treatment_page=old_treatment + new_control
+not_line_treatment_page
+3893
+No . of not line up ttment page equal 3893
+f. Do any of the rows have missing values?
+
+df.isnull().sum()
+user_id         0
+timestamp       0
+group           0
+landing_page    0
+converted       0
+dtype: int64
+There aren't any null values
+2. For the rows where treatment is not aligned with new_page or control is not aligned with old_page, we cannot be sure if this row truly received the new or old page. Use Quiz 2 in the classroom to provide how we should handle these rows.
+
+a. Now use the answer to the quiz to create a new dataset that meets the specifications from the quiz. Store your new dataframe in df2.
+
+df_new_treatment = df[(df.group == 'treatment') & (df.landing_page == 'new_page')] 
+df_old_control = df[(df.group == 'control') & (df.landing_page == 'old_page')] 
+
+df_array = [df_new_treatment, df_old_control]
+
+df2 = pd.concat(df_array)
+# Double Check all of the correct rows were removed - this should be 0
+df2[((df2['group'] == 'treatment') == (df2['landing_page'] == 'new_page')) == False].shape[0]
+0
+3. Use df2 and the cells below to answer questions for Quiz3 in the classroom.
+
+a. How many unique user_ids are in df2?
+
+df2['user_id'].nunique()
+290584
+b. There is one user_id repeated in df2. What is it?
+
+df2[df2.user_id.duplicated(keep=False)]
+user_id	timestamp	group	landing_page	converted
+1899	773192	2017-01-09 05:37:58.781806	treatment	new_page	0
+2893	773192	2017-01-14 02:55:59.590927	treatment	new_page	0
+c. What is the row information for the repeat user_id?
+
+Same user_id but with diffrent time stamp
+d. Remove one of the rows with a duplicate user_id, but keep your dataframe as df2.
+
+df2.drop_duplicates(subset='user_id', inplace= True)
+df2[df2.user_id.duplicated(keep=False)]
+user_id	timestamp	group	landing_page	converted
+4. Use df2 in the below cells to answer the quiz questions related to Quiz 4 in the classroom.
+
+a. What is the probability of an individual converting regardless of the page they receive?
+
+df2.converted.mean()
+0.11959708724499628
+b. Given that an individual was in the control group, what is the probability they converted?
+
+df2.query("group=='control'").converted.mean()
+0.1203863045004612
+c. Given that an individual was in the treatment group, what is the probability they converted?
+
+p_treatment=df2.query('group=="treatment"')
+p_treatment['converted'].mean()
+0.11880806551510564
+d. What is the probability that an individual received the new page?
+
+df2.landing_page.value_counts()[0]/len(df.index)
+0.4934494257635545
+e. Consider your results from a. through d. above, and explain below whether you think there is sufficient evidence to say that the new treatment page leads to more conversions.
+
+From the previous results, we notice that: The diffrence in probability between control (0.1204) and treatment (0.119) groups is not highly signifcant to ensure that if new page make a diffrence in conversion than the old one.
+
+
+Part II - A/B Test
+Notice that because of the time stamp associated with each event, you could technically run a hypothesis test continuously as each observation was observed.
+
+However, then the hard question is do you stop as soon as one page is considered significantly better than another or does it need to happen consistently for a certain amount of time? How long do you run to render a decision that neither page is better than another?
+
+These questions are the difficult parts associated with A/B tests in general.
+
+1. For now, consider you need to make the decision just based on all the data provided. If you want to assume that the old page is better unless the new page proves to be definitely better at a Type I error rate of 5%, what should your null and alternative hypotheses be? You can state your hypothesis in terms of words or in terms of 
+p
+o
+l
+d
+ and 
+p
+n
+e
+w
+, which are the converted rates for the old and new pages.
+
+H0= p_old>= p_new
+H1 = p_old<p_new
+Null Hyposis: in case of p_value< 5% >>>>> old_page has higher converting rate. Alternative Hyposis: in case p_value >= 5%, New_page has higher converting rate.
+
+2. Assume under the null hypothesis, 
+p
+n
+e
+w
+ and 
+p
+o
+l
+d
+ both have "true" success rates equal to the converted success rate regardless of page - that is 
+p
+n
+e
+w
+ and 
+p
+o
+l
+d
+ are equal. Furthermore, assume they are equal to the converted rate in ab_data.csv regardless of the page.
+
+
+Use a sample size for each page equal to the ones in ab_data.csv.
+
+
+Perform the sampling distribution for the difference in converted between the two pages over 10,000 iterations of calculating an estimate from the null.
+
+
+Use the cells below to provide the necessary parts of this simulation. If this doesn't make complete sense right now, don't worry - you are going to work through the problems below to complete this problem. You can use Quiz 5 in the classroom to make sure you are on the right track.
+
+
+a. What is the convert rate for 
+p
+n
+e
+w
+ under the null?
+
+p_new=df2.converted.mean()
+p_new
+0.11959708724499628
+b. What is the convert rate for 
+p
+o
+l
+d
+ under the null?
+
+
+p_old=df2.converted.mean()
+p_old
+0.11959708724499628
+c. What is 
+n
+n
+e
+w
+?
+
+n_new= (df2.query('landing_page=="new_page"')).shape[0]
+n_new
+145310
+d. What is 
+n
+o
+l
+d
+?
+
+n_old= (df2.query('landing_page=="old_page"')).shape[0]
+n_old
+145274
+e. Simulate 
+n
+n
+e
+w
+ transactions with a convert rate of 
+p
+n
+e
+w
+ under the null. Store these 
+n
+n
+e
+w
+ 1's and 0's in new_page_converted.
+
+new_page_converted = np.random.choice([0,1], size=n_new ,p=[p_new,1 - p_new])
+new_page_converted
+array([1, 0, 1, ..., 0, 1, 1])
+f. Simulate 
+n
+o
+l
+d
+ transactions with a convert rate of 
+p
+o
+l
+d
+ under the null. Store these 
+n
+o
+l
+d
+ 1's and 0's in old_page_converted.
+
+old_page_converted = np.random.choice([0,1], size=n_old ,p=[p_old,1 - p_old])
+old_page_converted
+array([1, 1, 1, ..., 0, 1, 0])
+g. Find 
+p
+n
+e
+w
+ - 
+p
+o
+l
+d
+ for your simulated values from part (e) and (f).
+
+p_new - p_old
+0.0
+h. Simulate 10,000 
+p
+n
+e
+w
+ - 
+p
+o
+l
+d
+ values using this same process similarly to the one you calculated in parts a. through g. above. Store all 10,000 values in a numpy array called p_diffs.
+
+# discrete distrbution of new_converted
+new_converted=np.random.binomial(n_new,p_new, size=10000)
+new=new_converted/n_new
+ # discrete distrbution of old_converted
+old_converted = np.random.binomial(n_old, p_old, size=10000)
+old= old_converted/n_old
+# diffrence in distrbution
+p_diffs=new - old
+p_diffs
+array([ 0.00051403,  0.00125727,  0.00237245, ...,  0.00131937,
+        0.00246184, -0.00046313])
+i. Plot a histogram of the p_diffs. Does this plot look like what you expected? Use the matching problem in the classroom to assure you fully understand what was computed here.
+
+plt.hist(p_diffs);
+
+j. What proportion of the p_diffs are greater than the actual difference observed in ab_data.csv?
+
+# Calc. the real difference observed in ab_data
+
+old_query = df.query('group =="control"')
+old_mean= old_query.converted.mean()
+new_query = df.query('group =="treatment"')
+new_mean=new_query.converted.mean()
+mean_diff = new_mean - old_mean
+
+# Convert p_diffs to array
+
+p_diffs = np.array(p_diffs)
+
+# Calculate the propotion of the p_diffs are greater than the real difference observed in ab_data.csv
+(p_diffs > mean_diff).mean()
+0.8915
+plt.hist(p_diffs);
+plt.axvline(mean_diff,c='y',linewidth = 1);
+
+k. In words, explain what you just computed in part j. What is this value called in scientific studies? What does this value mean in terms of whether or not there is a difference between the new and old pages?
+
+This value represent the p-value of observation, so the Null is true. As the p-value is large enough, so, we can't reject the Null hypothesis and keep the old page as it's.
+
+l. We could also use a built-in to achieve similar results. Though using the built-in might be easier to code, the above portions are a walkthrough of the ideas that are critical to correctly thinking about statistical significance. Fill in the below to calculate the number of conversions for each page, as well as the number of individuals who received each page. Let n_old and n_new refer the the number of rows associated with the old page and new pages, respectively.
+
+import statsmodels.api as sm
+# old_page
+convert_old = df2.query("group == 'control'").converted.sum()
+n_old = len(df2.query("group == 'control'"))
+#new_page
+convert_new = df2.query("group == 'treatment'").converted.sum()
+n_new = len(df2.query("group == 'treatment'"))
+m. Now use stats.proportions_ztest to compute your test statistic and p-value. Here is a helpful link on using the built in.
+
+z_score, p_value = sm.stats.proportions_ztest ([convert_old, convert_new],[n_old,n_new],alternative='larger')
+z_score,p_value
+(1.3109241984234394, 0.09494168724097551)
+from scipy.stats import norm
+
+sn_z_score= norm.cdf(z_score)
+sn_z_score
+0.9050583127590245
+norm.ppf(1-(0.05))
+1.6448536269514722
+n. What do the z-score and p-value you computed in the previous question mean for the conversion rates of the old and new pages? Do they agree with the findings in parts j. and k.?
+
+The values of z_scor and P_value mean that we shouldn't reject the null. P_value is 0.91 and this higher than significance value (0.05), so we shouldn't be confident with 95% of conversion rate of old page to newer on.
+
+
+Part III - A regression approach
+1. In this final part, you will see that the result you acheived in the previous A/B test can also be acheived by performing regression.
+
+
+a. Since each row is either a conversion or no conversion, what type of regression should you be performing in this case?
+
+We should use a logestic regression, as the debendent variable is a binary variable( convered/ not converted)
+
+b. The goal is to use statsmodels to fit the regression model you specified in part a. to see if there is a significant difference in conversion based on which page a customer receives. However, you first need to create a column for the intercept, and create a dummy variable column for which page each user received. Add an intercept column, as well as an ab_page column, which is 1 when an individual receives the treatment and 0 if control.
+
+df2[['treatment', 'control']]=pd.get_dummies(df2.group)
+df2['intercept']=1
+df2 = df2.drop('control',axis = 1)
+df2.head()
+user_id	timestamp	group	landing_page	converted	treatment	intercept
+2	661590	2017-01-11 16:55:06.154213	treatment	new_page	0	0	1
+3	853541	2017-01-08 18:28:03.143765	treatment	new_page	0	0	1
+6	679687	2017-01-19 03:26:46.940749	treatment	new_page	1	0	1
+8	817355	2017-01-04 17:58:08.979471	treatment	new_page	1	0	1
+9	839785	2017-01-15 18:11:06.610965	treatment	new_page	1	0	1
+df3= df2.rename(columns={'treatment': 'ab_page'})
+df3.head()
+user_id	timestamp	group	landing_page	converted	ab_page	intercept
+2	661590	2017-01-11 16:55:06.154213	treatment	new_page	0	0	1
+3	853541	2017-01-08 18:28:03.143765	treatment	new_page	0	0	1
+6	679687	2017-01-19 03:26:46.940749	treatment	new_page	1	0	1
+8	817355	2017-01-04 17:58:08.979471	treatment	new_page	1	0	1
+9	839785	2017-01-15 18:11:06.610965	treatment	new_page	1	0	1
+c. Use statsmodels to import your regression model. Instantiate the model, and fit the model using the two columns you created in part b. to predict whether or not an individual converts.
+
+from scipy import stats
+stats.chisqprob = lambda chisq, df3: stats.chi2.sf(chisq, df3)
+df3.intercept=1
+inst= sm.Logit(df3['converted'], df3[['intercept', 'ab_page']])
+d. Provide the summary of your model below, and use it as necessary to answer the following questions.
+
+fit_result=inst.fit()
+Optimization terminated successfully.
+         Current function value: 0.366118
+         Iterations 6
+fit_result.summary()
+Logit Regression Results
+Dep. Variable:	converted	No. Observations:	290584
+Model:	Logit	Df Residuals:	290582
+Method:	MLE	Df Model:	1
+Date:	Sun, 26 Dec 2021	Pseudo R-squ.:	8.077e-06
+Time:	18:55:42	Log-Likelihood:	-1.0639e+05
+converged:	True	LL-Null:	-1.0639e+05
+Covariance Type:	nonrobust	LLR p-value:	0.1899
+coef	std err	z	P>|z|	[0.025	0.975]
+intercept	-2.0038	0.008	-247.146	0.000	-2.020	-1.988
+ab_page	0.0150	0.011	1.311	0.190	-0.007	0.037
+e. What is the p-value associated with ab_page? Why does it differ from the value you found in Part II?
+
+Hint: What are the null and alternative hypotheses associated with your regression model, and how do they compare to the null and alternative hypotheses in the Part II?
+
+P-value = 0.190,
+diffrence may be due to the test of regression model cal. intercept or may be due to diffrence in one or two tailed testing.
+Alternative hyposis from part 2: old_page conversion rate is less than new_page conversion rate, and this assume one tailed test. but in part 3: Alt. hyposis can be calc. by two tailed test:
+(1) The landing_page type influences (positively or negatively) the conversion rate or (2) the conversion rate of the old_page is different to the conversion rate of the new_page
+f. Now, you are considering other things that might influence whether or not an individual converts. Discuss why it is a good idea to consider other factors to add into your regression model. Are there any disadvantages to adding additional terms into your regression model?
+
+1- Using many factors in a logistic regression model, may lead to reduce the power on analysis. 2- Other factors we can add, the age, to display relation beteen age and appearance of page
+
+g. Now along with testing if the conversion rate changes for different pages, also add an effect based on which country a user lives. You will need to read in the countries.csv dataset and merge together your datasets on the approporiate rows. Here are the docs for joining tables.
+
+Does it appear that country had an impact on conversion? Don't forget to create dummy variables for these country columns - Hint: You will need two columns for the three dummy variables. Provide the statistical output as well as a written response to answer this question.
+
+countries_df = pd.read_csv('./countries.csv')
+countries_df.head()
+user_id	country
+0	834778	UK
+1	928468	US
+2	822059	UK
+3	711597	UK
+4	710616	UK
+### Create the necessary dummy variables
+countries_df[['CA', 'UK', 'US']]=pd.get_dummies(countries_df.country)
+new_countries_df=countries_df.drop('country', axis='columns')
+new_countries_df.head()
+user_id	CA	UK	US
+0	834778	0	1	0
+1	928468	0	0	1
+2	822059	0	1	0
+3	711597	0	1	0
+4	710616	0	1	0
+df_join=df3.set_index('user_id').join(new_countries_df.set_index('user_id'))
+df_join.head()
+timestamp	group	landing_page	converted	ab_page	intercept	CA	UK	US
+user_id									
+661590	2017-01-11 16:55:06.154213	treatment	new_page	0	0	1	0	0	1
+853541	2017-01-08 18:28:03.143765	treatment	new_page	0	0	1	0	0	1
+679687	2017-01-19 03:26:46.940749	treatment	new_page	1	0	1	1	0	0
+817355	2017-01-04 17:58:08.979471	treatment	new_page	1	0	1	0	1	0
+839785	2017-01-15 18:11:06.610965	treatment	new_page	1	0	1	1	0	0
+#probablity of CA
+dummy_CA= df_join.query('CA==1')
+mean_CA= dummy_CA.converted.mean()
+# probability of UK
+dummy_UK= df_join.query('UK==1')
+mean_UK= dummy_UK.converted.mean()
+# probability of US
+dummy_US= df_join.query('US==1')
+mean_US= dummy_US.converted.mean()
+mean_CA, mean_UK, mean_US
+(0.11531829781364232, 0.12059448568984076, 0.1195468006423762)
+h. Though you have now looked at the individual factors of country and page on conversion, we would now like to look at an interaction between page and country to see if there significant effects on conversion. Create the necessary additional columns, and fit the new model.
+
+Provide the summary results, and your conclusions based on the results.
+
+df_join['US_new'] = df_join['US'] * df_join['ab_page']
+df_join['UK_new'] = df_join['UK'] * df_join['ab_page']
+df_join['CA_new'] = df_join['CA'] * df_join['ab_page']
+df_join.head()
+### Fit Your Linear Model And Obtain the Results
+
+dummy_logit= sm.Logit(df_join.converted,df_join[['intercept','US_new', 'UK_new','CA_new']])
+fit_dummy_result=dummy_logit.fit()
+Optimization terminated successfully.
+         Current function value: 0.366118
+         Iterations 6
+fit_dummy_result.summary()
+Logit Regression Results
+Dep. Variable:	converted	No. Observations:	290584
+Model:	Logit	Df Residuals:	290580
+Method:	MLE	Df Model:	3
+Date:	Sun, 26 Dec 2021	Pseudo R-squ.:	9.383e-06
+Time:	19:08:53	Log-Likelihood:	-1.0639e+05
+converged:	True	LL-Null:	-1.0639e+05
+Covariance Type:	nonrobust	LLR p-value:	0.5731
+coef	std err	z	P>|z|	[0.025	0.975]
+intercept	-2.0038	0.008	-247.146	0.000	-2.020	-1.988
+US_new	0.0173	0.013	1.374	0.170	-0.007	0.042
+UK_new	0.0115	0.018	0.639	0.523	-0.024	0.047
+CA_new	-0.0002	0.037	-0.006	0.995	-0.073	0.073
+Conslusion:
+from previous analysis: we notice that, there is n't enough evidence that neither the new page nor the country, influnce the rate of conv.
+
+it is favor to foucous the development on new lading page
+
+Conclusions
+Congratulations on completing the project!
+
+Gather Submission Materials
+Once you are satisfied with the status of your Notebook, you should save it in a format that will make it easy for others to read. You can use the File -> Download as -> HTML (.html) menu to save your notebook as an .html file. If you are working locally and get an error about "No module name", then open a terminal and try installing the missing module using pip install <module_name> (don't include the "<" or ">" or any words following a period in the module name).
+
+You will submit both your original Notebook and an HTML or PDF copy of the Notebook for review. There is no need for you to include any data files with your submission. If you made reference to other websites, books, and other resources to help you in solving tasks in the project, make sure that you document them. It is recommended that you either add a "Resources" section in a Markdown cell at the end of the Notebook report, or you can include a readme.txt file documenting your sources.
+
+Submit the Project
+When you're ready, click on the "Submit Project" button to go to the project submission page. You can submit your files as a .zip archive or you can link to a GitHub repository containing your project files. If you go with GitHub, note that your submission will be a snapshot of the linked repository at time of submission. It is recommended that you keep each project in a separate repository to avoid any potential confusion: if a reviewer gets multiple folders representing multiple projects, there might be confusion regarding what project is to be evaluated.
+
+It can take us up to a week to grade the project, but in most cases it is much faster. You will get an email once your submission has been reviewed. If you are having any problems submitting your project or wish to check on the status of your submission, please email us at dataanalyst-project@udacity.com. In the meantime, you should feel free to continue on with your learning journey by beginning the next module in the program.
+
+ 
